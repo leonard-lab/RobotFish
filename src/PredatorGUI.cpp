@@ -120,7 +120,6 @@ void PredatorFrame::doUserControl()
 	double dth = atan2(dy, -dx) - MT_DEG2RAD*(m_Robots[0]->GetTheta());
 	double d = sqrt(dx*dx + dy*dy);
 	double spd = 0;
-	double vert = 0;
 	double turn = 0;
 
 	if(d < m_dGotoDist)
@@ -141,11 +140,7 @@ void PredatorFrame::doUserControl()
 		turn = m_dGotoTurningGain*sin(dth);
 	}
 
-	printf("dx = %f, dy = %f, dth = %f (%f - %f) spd = %f, turn = %f\n",
-		dx, dy, MT_RAD2DEG*dth, MT_RAD2DEG*atan2(dy, -dx), m_Robots[0]->GetTheta(), spd, turn);
-
-	u[PREDATOR_CONTROL_FWD_SPEED] = -spd;
-	u[PREDATOR_CONTROL_VERT_SPEED] = vert;
+	u[PREDATOR_CONTROL_SPEED] = -spd;
 	u[PREDATOR_CONTROL_STEERING] = turn;
 
 	m_Robots[0]->SetControl(u);

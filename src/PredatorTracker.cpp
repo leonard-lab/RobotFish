@@ -988,7 +988,6 @@ std::vector<double> PredatorTracker::getPredatorState(unsigned int i)
 	r[PREDATOR_STATE_Y] = m_vdTracked_Y[i];
 	r[PREDATOR_STATE_HEADING] = m_vdTracked_Heading[i];
 	r[PREDATOR_STATE_SPEED] = m_vdTracked_Speed[i];
-	r[PREDATOR_STATE_ORIENTATION] = m_vdBlobs_Orientation[i];
 
 	return r;
 }
