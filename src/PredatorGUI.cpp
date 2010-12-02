@@ -25,7 +25,7 @@ PredatorFrame::PredatorFrame(wxFrame* parent,
                                const wxSize& size,     
                                long style)
   : MT_RobotFrameBase(parent, id, title, pos, size, style),
-    m_iNToTrack(2),
+    m_iNToTrack(1),
 	m_dGotoDist(50.0),
 	m_dGotoMaxSpeed(15.0),
 	m_dGotoTurningGain(25.0),
@@ -115,9 +115,9 @@ void PredatorFrame::doUserControl()
 		m_dGotoY = m_Robots[2]->GetY();
 	}
 
-	double dx = m_Robots[0]->GetX() - m_dGotoX;
+	double dx = -(m_Robots[0]->GetX() - m_dGotoX);
 	double dy = m_Robots[0]->GetY() - m_dGotoY;
-	double dth = atan2(dy, -dx) - MT_DEG2RAD*(m_Robots[0]->GetTheta());
+	double dth = atan2(dy, dx) - (m_Robots[0]->GetTheta());
 	double d = sqrt(dx*dx + dy*dy);
 	double spd = 0;
 	double turn = 0;
@@ -140,8 +140,8 @@ void PredatorFrame::doUserControl()
 		turn = m_dGotoTurningGain*sin(dth);
 	}
 
-	u[PREDATOR_CONTROL_SPEED] = -spd;
-	u[PREDATOR_CONTROL_STEERING] = turn;
+	u[PREDATOR_CONTROL_SPEED] = spd;
+	u[PREDATOR_CONTROL_STEERING] = -turn;
 
 	m_Robots[0]->SetControl(u);
 	m_Robots[0]->Control();
