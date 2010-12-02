@@ -1,12 +1,13 @@
 ##################################################
 #
-# CMakeLists.txt - Root cmake file for BelugaTracker
+# CMakeLists.txt - Root cmake file for RobotFish
 #
 # History:
 #   * Original file - Dan Swain, 7/6/10
 #   * Simplied significantly - DTS 7/14/10
 #   * Modified from SimpleBWTracker - DTS 8/26/10
 #   * Modified from KilliTracker - DTS 9/10/10
+#   * Modified from BelugaTracker - DTS 12/1/10
 #   
 ##################################################
 
