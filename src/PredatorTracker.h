@@ -21,11 +21,6 @@ private:
     IplImage* m_pGSFrame;      /* Grayscale version of current frame */
     IplImage* m_pDiffFrame;    /* Background subtracted frame */
     IplImage* m_pThreshFrame;  /* Thresholded frame */
-	IplImage* m_pHSVFrame;
-	IplImage* m_pHFrame;
-	IplImage* m_pSFrame;
-	IplImage* m_pVFrame;
-	void HSVSplit(IplImage* frame);
 
     /* blobber parameters */
     unsigned int m_iBlobValThresh;

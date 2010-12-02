@@ -286,23 +286,6 @@ PredatorTracker::~PredatorTracker()
     cvReleaseMat(&m_pQ);
     cvReleaseMat(&m_pR);
 
-	if(m_pHSVFrame)
-	{
-		cvReleaseImage(&m_pHSVFrame);
-	}
-	if(m_pHFrame)
-	{
-		cvReleaseImage(&m_pHFrame);
-	}
-	if(m_pSFrame)
-	{
-		cvReleaseImage(&m_pSFrame);
-	}
-	if(m_pVFrame)
-	{
-		cvReleaseImage(&m_pVFrame);
-	}
-
     /* MT_UKFFree frees up memory used by the UKF */
     for(unsigned int i = 0; i < m_iNObj; i++)
     {
@@ -327,11 +310,6 @@ void PredatorTracker::doInit(IplImage* ProtoFrame)
     m_pGSFrame = NULL;
     m_pDiffFrame = NULL;
     m_pThreshFrame = NULL;
-
-	m_pHSVFrame = NULL;
-	m_pHFrame = NULL;
-	m_pSFrame = NULL;
-	m_pVFrame = NULL;
 
     /* grab the frame height */
     m_iFrameHeight = ProtoFrame->height;
@@ -374,11 +352,6 @@ void PredatorTracker::doInit(IplImage* ProtoFrame)
     m_pTrackerFrameGroup = new MT_TrackerFrameGroup();
     m_pTrackerFrameGroup->pushFrame(&m_pDiffFrame,      "Diff Frame");
     m_pTrackerFrameGroup->pushFrame(&m_pThreshFrame,    "Threshold Frame");
-	m_pTrackerFrameGroup->pushFrame(&m_pHSVFrame, "HSV");
-	m_pTrackerFrameGroup->pushFrame(&m_pHFrame, "H");
-	m_pTrackerFrameGroup->pushFrame(&m_pSFrame, "S");
-	m_pTrackerFrameGroup->pushFrame(&m_pVFrame, "V");
-	m_pTrackerFrameGroup->pushFrame(&m_pGSFrame, "GS");
 
     /* Data group and Data report setup.
      *
@@ -463,16 +436,11 @@ void PredatorTracker::doInit(IplImage* ProtoFrame)
 
 void PredatorTracker::doTrain(IplImage* frame)
 {
-	printf("Training.\n");
 	m_iFrameWidth = frame->width;
 	m_iFrameHeight = frame->height;
 	CvSize fsize = cvSize(m_iFrameWidth, m_iFrameHeight);
 
 	MT_TrackerBase::doTrain(frame);
-
-	HSVSplit(frame);
-
-	cvCopy(m_pSFrame, BG_frame);
 
 	if(m_pGSThresholder)
 	{
@@ -485,6 +453,7 @@ void PredatorTracker::doTrain(IplImage* frame)
     m_pGSFrame = m_pGSThresholder->getGSFrame();
     m_pDiffFrame = m_pGSThresholder->getDiffFrame();
     m_pThreshFrame = m_pGSThresholder->getThreshFrame();
+
 }
 
 /* This gets called by MT_TrackerBase::doInit.  I use it here more to
@@ -494,18 +463,6 @@ void PredatorTracker::createFrames()
 {
     /* this makes sure that the BG_frame is created */
     MT_TrackerBase::createFrames();
-
-	if(m_pHSVFrame)
-	{
-		cvReleaseImage(&m_pHSVFrame);
-		cvReleaseImage(&m_pHFrame);
-		cvReleaseImage(&m_pSFrame);
-		cvReleaseImage(&m_pVFrame);
-	}
-	m_pHSVFrame = cvCreateImage(cvSize(m_iFrameWidth, m_iFrameHeight), IPL_DEPTH_8U, 3);
-	m_pHFrame = cvCreateImage(cvSize(m_iFrameWidth, m_iFrameHeight), IPL_DEPTH_8U, 1);
-	m_pSFrame = cvCreateImage(cvSize(m_iFrameWidth, m_iFrameHeight), IPL_DEPTH_8U, 1);
-	m_pVFrame = cvCreateImage(cvSize(m_iFrameWidth, m_iFrameHeight), IPL_DEPTH_8U, 1);
 
 	//m_pGSThresholder = NULL;
     /* Create the Thresholder and Blobber objects */
@@ -588,12 +545,6 @@ void PredatorTracker::writeData()
     m_XDF.writeData("Tracked Speed"    , m_vdTracked_Speed); 
 }
 
-void PredatorTracker::HSVSplit(IplImage* frame)
-{
-	cvCvtColor(frame, m_pHSVFrame, CV_RGB2HSV);
-	cvSplit(m_pHSVFrame, m_pHFrame, m_pSFrame, m_pVFrame, NULL);
-}
-
 /* Main tracking function - gets called by MT_TrackerFrameBase every
  * time step when the application is not paused. */
 void PredatorTracker::doTracking(IplImage* frame)
@@ -668,11 +619,10 @@ void PredatorTracker::doTracking(IplImage* frame)
      * end up using the sparse image - instead we use the full
      * threshold image, which is pointed to by m_pThreshFrame.
      */       
-	HSVSplit(frame);
-    MT_SparseBinaryImage b = m_pGSThresholder->threshToBinary(m_pSFrame,
+    MT_SparseBinaryImage b = m_pGSThresholder->threshToBinary(frame,
                                                               m_iBlobValThresh,
                                                               ROI_frame,
-															  MT_THRESH_LIGHTER);
+															  MT_THRESH_DARKER);
 
     /* make sure these pointers are updated */
     m_pGSFrame = m_pGSThresholder->getGSFrame();
