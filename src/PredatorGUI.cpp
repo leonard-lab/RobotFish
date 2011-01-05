@@ -34,7 +34,8 @@ PredatorFrame::PredatorFrame(wxFrame* parent,
     m_pServer(NULL),
 	m_bGotoActive(false),
 	m_dGotoX(0),
-	m_dGotoY(0)
+	m_dGotoY(0),
+    m_dPolarizationThresh(0.5)
 {
 
 }
@@ -52,6 +53,7 @@ void PredatorFrame::initUserData()
 	m_pPreferences->AddDouble("Goto Cutoff Distance", &m_dGotoDist, MT_DATA_READWRITE, 0);
 	m_pPreferences->AddDouble("Goto Max Speed", &m_dGotoMaxSpeed, MT_DATA_READWRITE, 0);
 	m_pPreferences->AddDouble("Goto Turning Gain", &m_dGotoTurningGain, MT_DATA_READWRITE, 0);
+	m_pPreferences->AddDouble("Attack Polarization Threshold", &m_dPolarizationThresh, MT_DATA_READWRITE, 0, 1.0);    
 
     std::vector<std::string> botnames;
     for(unsigned int i = 0; i < 7; i++)
@@ -102,7 +104,7 @@ void PredatorFrame::doUserControl()
 		return;
 	}
 
-	if(!m_bGotoActive || !m_bControlActive)
+	if(!m_bControlActive)
 	{
 		m_Robots[0]->SetControl(u);
 		m_Robots[0]->Control();
@@ -114,6 +116,23 @@ void PredatorFrame::doUserControl()
 		m_dGotoX = m_Robots[2]->GetX();
 		m_dGotoY = m_Robots[2]->GetY();
 	}
+
+    int nfish;
+    double fishx, fishy, fishpolarization;
+    if(m_pPredatorTracker)
+    {
+        m_pPredatorTracker->getFishInfo(&nfish, &fishx, &fishy, &fishpolarization);
+        printf("Polarization: %f\n", fishpolarization);
+
+        if(nfish > 0 && fishpolarization < m_dPolarizationThresh)
+        {
+            m_bGotoActive = true;
+            m_dGotoX = fishx;
+            m_dGotoY = fishy;
+        }
+        
+    }
+    
 
 	double dx = -(m_Robots[0]->GetX() - m_dGotoX);
 	double dy = m_Robots[0]->GetY() - m_dGotoY;
@@ -140,8 +159,14 @@ void PredatorFrame::doUserControl()
 		turn = m_dGotoTurningGain*sin(dth);
 	}
 
-	u[PREDATOR_CONTROL_SPEED] = spd;
-	u[PREDATOR_CONTROL_STEERING] = -turn;
+    if(!m_bGotoActive)
+    {
+        spd = 0;
+        turn = 0;
+    }
+    
+    u[PREDATOR_CONTROL_SPEED] = spd;
+    u[PREDATOR_CONTROL_STEERING] = -turn;
 
 	m_Robots[0]->SetControl(u);
 	m_Robots[0]->Control();

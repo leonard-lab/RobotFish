@@ -36,6 +36,7 @@ protected:
 	bool m_bGotoActive;
 	double m_dGotoX;
 	double m_dGotoY;
+    double m_dPolarizationThresh;
 
 public:
     PredatorFrame(wxFrame* parent,

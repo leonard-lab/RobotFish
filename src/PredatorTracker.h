@@ -21,6 +21,7 @@ private:
     IplImage* m_pGSFrame;      /* Grayscale version of current frame */
     IplImage* m_pDiffFrame;    /* Background subtracted frame */
     IplImage* m_pThreshFrame;  /* Thresholded frame */
+    IplImage* m_pThreshFrameCopy;
 
     /* blobber parameters */
     unsigned int m_iBlobValThresh;
@@ -36,6 +37,7 @@ private:
 
     MT_GSThresholder* m_pGSThresholder;
     GYBlobber* m_pGYBlobber;
+    YABlobber* m_pYABlobber;
     std::vector<MT_UKF_struct*> m_vpUKF;
     CvMat* m_pQ;
     CvMat* m_pR;
@@ -68,6 +70,24 @@ private:
     std::vector<double> m_vdBlobs_MajorAxis;
     std::vector<double> m_vdBlobs_MinorAxis;
     std::vector<double> m_vdBlobs_Speed;
+
+    int m_iMinFishPerimeter;
+    int m_iMinFishArea;
+    int m_iMaxFishPerimeter;
+    int m_iMaxFishArea;
+    int m_iNFishFound;
+    
+    std::vector<double> m_vdFish_X;
+	std::vector<double> m_vdFish_Y;
+	std::vector<double> m_vdFish_Orientation;
+	std::vector<double> m_vdFish_Area;
+    double m_dTotalFishArea;
+    double m_dFishPolarization;
+    double m_dFishCOMx;
+    double m_dFishCOMy;
+    double m_dFishXX;
+    double m_dFishXY;
+    double m_dFishYY;
 
     std::vector<double> m_vdTracked_X;
     std::vector<double> m_vdTracked_Y;
@@ -110,6 +130,8 @@ public:
 	std::vector<double> getPredatorState(unsigned int i);
 	double getPredatorX(unsigned int i){if(i >= m_vdTracked_X.size()){return 0;} else {return m_vdTracked_X[i];}};
 	double getPredatorY(unsigned int i){if(i >= m_vdTracked_Y.size()){return 0;} else {return m_iFrameHeight - m_vdTracked_Y[i];}};
+
+    void getFishInfo(int* nfish, double* xcom, double* ycom, double* polarization);
 
 };
 

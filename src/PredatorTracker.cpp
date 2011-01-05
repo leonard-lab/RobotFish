@@ -243,6 +243,7 @@ PredatorTracker::PredatorTracker(IplImage* ProtoFrame, unsigned int n_obj)
       m_iStopFrame(-1),
       m_pGSThresholder(            NULL                        ),
       m_pGYBlobber(NULL),
+      m_pYABlobber(NULL),
       m_vpUKF(n_obj, NULL),
       m_dSigmaPosition(DEFAULT_SIGMA_POSITION),
       m_dSigmaHeading(DEFAULT_SIGMA_HEADING),
@@ -254,6 +255,10 @@ PredatorTracker::PredatorTracker(IplImage* ProtoFrame, unsigned int n_obj)
       m_dPrevSigmaSpeed(0),
       m_dPrevSigmaPositionMeas(0),
       m_dPrevSigmaHeadingMeas(0),
+      m_iMinFishPerimeter(10),
+      m_iMinFishArea(10),
+      m_iMaxFishPerimeter(100),
+      m_iMaxFishArea(100),
       m_bShowBlobs(true),
       m_bShowTracking(true),
       m_dDt(0),
@@ -278,6 +283,10 @@ PredatorTracker::~PredatorTracker()
     if(m_pGYBlobber)
     {
         delete m_pGYBlobber;
+    }
+    if(m_pYABlobber)
+    {
+        delete m_pYABlobber;
     }
 
     /* cvReleaseMat deallocates matrices given to it */
@@ -310,6 +319,7 @@ void PredatorTracker::doInit(IplImage* ProtoFrame)
     m_pGSFrame = NULL;
     m_pDiffFrame = NULL;
     m_pThreshFrame = NULL;
+    m_pThreshFrameCopy = NULL;
 
     /* grab the frame height */
     m_iFrameHeight = ProtoFrame->height;
@@ -335,6 +345,11 @@ void PredatorTracker::doInit(IplImage* ProtoFrame)
     m_vdTracked_Y.resize(m_iNObj);
     m_vdTracked_Heading.resize(m_iNObj);
     m_vdTracked_Speed.resize(m_iNObj);
+
+    m_vdFish_X.resize(0);
+    m_vdFish_Y.resize(0);
+    m_vdFish_Orientation.resize(0);
+    m_vdFish_Area.resize(0);
 
     m_vdHistories_X.resize(m_iNObj);
     m_vdHistories_Y.resize(m_iNObj);
@@ -407,6 +422,24 @@ void PredatorTracker::doInit(IplImage* ProtoFrame)
                        MT_DATA_READWRITE,
                        0);
 
+    MT_DataGroup* dg_fish = new MT_DataGroup("Fish Blobbing Parameters");
+    dg_fish->AddInt("Min Perimeter",
+                    &m_iMinFishPerimeter,
+                    MT_DATA_READWRITE,
+                    0);
+    dg_fish->AddInt("Min Area",
+                    &m_iMinFishArea,
+                    MT_DATA_READWRITE,
+                    0);
+    dg_fish->AddInt("Max Perimeter",
+                    &m_iMaxFishPerimeter,
+                    MT_DATA_READWRITE,
+                    0);
+    dg_fish->AddInt("Max Area",
+                    &m_iMaxFishArea,
+                    MT_DATA_READWRITE,
+                    0);
+
     MT_DataGroup* dg_draw = new MT_DataGroup("Drawing Options");
     dg_draw->AddBool("Show blob arrows", &m_bShowBlobs);
     dg_draw->AddBool("Show tracking arrows", &m_bShowTracking);
@@ -415,6 +448,7 @@ void PredatorTracker::doInit(IplImage* ProtoFrame)
      * MT_TrackerBase will automagically report to the GUI */
     m_vDataGroups.resize(0);
     m_vDataGroups.push_back(dg_blob);
+    m_vDataGroups.push_back(dg_fish);
     m_vDataGroups.push_back(dg_draw);
     
     MT_DataReport* dr_tracked = new MT_DataReport("Tracked data");
@@ -454,6 +488,8 @@ void PredatorTracker::doTrain(IplImage* frame)
     m_pDiffFrame = m_pGSThresholder->getDiffFrame();
     m_pThreshFrame = m_pGSThresholder->getThreshFrame();
 
+    m_pThreshFrameCopy = cvCloneImage(m_pThreshFrame);
+
 }
 
 /* This gets called by MT_TrackerBase::doInit.  I use it here more to
@@ -468,6 +504,9 @@ void PredatorTracker::createFrames()
     /* Create the Thresholder and Blobber objects */
     //m_pGSThresholder = new MT_GSThresholder(BG_frame);
     m_pGYBlobber = new GYBlobber(m_iNObj);
+
+    m_pYABlobber = new YABlobber();
+    
     /* Initialize the Hungarian Matcher */
     m_HungarianMatcher.doInit(m_iNObj);
 
@@ -492,6 +531,11 @@ void PredatorTracker::createFrames()
 /* this gets called during the destructor */
 void PredatorTracker::releaseFrames()
 {
+
+    if(m_pThreshFrameCopy)
+    {
+        cvReleaseImage(&m_pThreshFrameCopy);
+    }
     
     /* Nothing really to do here.  BG_Frame is managed by the base
      * class and the GS, Diff, and Thresh frames are managed by
@@ -643,6 +687,85 @@ void PredatorTracker::doTracking(IplImage* frame)
 	m_pGYBlobber->m_iBlob_area_thresh_high = m_iBlobAreaThreshHigh;
 	m_pGYBlobber->setSearchArea(m_SearchArea);
     std::vector<GYBlob> blobs = m_pGYBlobber->findBlobs(m_pThreshFrame);
+
+    cvCopy(m_pThreshFrame, m_pThreshFrameCopy);
+    std::vector<YABlob> fish = m_pYABlobber->FindBlobs(m_pThreshFrameCopy,
+                                           m_iMinFishPerimeter,
+										   m_iMinFishArea,
+										   m_iMaxFishPerimeter,
+										   m_iMaxFishArea);
+
+    m_iNFishFound = 0;
+    m_dFishCOMx = m_dFishCOMy = m_dFishPolarization = m_dTotalFishArea = 0;
+    
+    m_vdFish_X.resize(0);  m_vdFish_Y.resize(0);
+    m_vdFish_Orientation.resize(0);  m_vdFish_Area.resize(0);
+    
+    double x, y;
+    const double dist_thresh = 25.0;
+    double pc, ps;
+    pc = ps = 0;
+
+    for(unsigned int i = 0; i < fish.size(); i++)
+    {
+        x = fish[i].COMx;
+        y = fish[i].COMy;
+        bool isa_robot = false;
+
+        for(unsigned int j = 0; j < blobs.size(); j++)
+        {
+            double xr = blobs[j].m_dXCentre;
+            double yr = blobs[j].m_dYCentre;
+            
+            if(fabs(x - xr) < dist_thresh &&
+               fabs(y - yr) < dist_thresh)
+            {
+                isa_robot = true;
+                break;
+            }
+        }
+        if(isa_robot)
+        {
+            continue;
+        }
+        
+        m_vdFish_X.push_back(x);
+        m_vdFish_Y.push_back(y);
+        m_vdFish_Orientation.push_back(MT_DEG2RAD*fish[i].orientation);
+        m_vdFish_Area.push_back(fish[i].area);
+
+        m_dFishCOMx += x;
+        m_dFishCOMy += y;
+        m_dTotalFishArea += fish[i].area;
+
+        pc += cos(fish[i].orientation);
+        ps += sin(fish[i].orientation);
+        
+        m_iNFishFound++;
+    }
+
+    m_dFishXX = 0;
+    m_dFishYY = 0;
+    m_dFishXY = 0;
+    
+    if(m_iNFishFound > 0)
+    {
+        double avg_fac = 1.0/((double) m_iNFishFound);
+        m_dFishCOMx *= avg_fac;
+        m_dFishCOMy *= avg_fac;
+        m_dFishPolarization = sqrt(pc*pc + ps*ps)*avg_fac;
+        for(unsigned int i = 0; i < m_iNFishFound; i++)
+        {
+            double dx = m_vdFish_X[i] - m_dFishCOMx;
+            double dy = m_vdFish_Y[i] - m_dFishCOMy;
+            m_dFishXX += dx*dx;
+            m_dFishYY += dy*dy;
+            m_dFishXY += dx*dy;
+        }
+        m_dFishXX *= avg_fac;
+        m_dFishXY *= avg_fac;
+        m_dFishYY *= avg_fac;
+    }
 
     /* Matching step.
      *
@@ -942,6 +1065,18 @@ std::vector<double> PredatorTracker::getPredatorState(unsigned int i)
 	return r;
 }
 
+void PredatorTracker::getFishInfo(int* nfish,
+                                  double* xcom,
+                                  double* ycom,
+                                  double* polarization)
+{
+    *nfish = m_iNFishFound;
+    *xcom = m_dFishCOMx;
+    *ycom = m_dFishCOMy;
+    *polarization = m_dFishPolarization;
+}
+
+
 /* Drawing function - gets called by the GUI
  * All of the drawing is done with OpenGL */
 void PredatorTracker::doGLDrawing(int flags)
@@ -998,6 +1133,48 @@ void PredatorTracker::doGLDrawing(int flags)
     }
 
 	MT_DrawRectangle(m_SearchArea.x, m_iFrameHeight - m_SearchArea.y - m_SearchArea.height, m_SearchArea.width, m_SearchArea.height);
+
+    if(m_iNFishFound)
+    {
+        for(unsigned int i = 0; i < m_iNFishFound; i++)
+        {
+            blobcenter.setx(m_vdFish_X[i]);
+            blobcenter.sety(m_iFrameHeight - m_vdFish_Y[i]);
+            blobcenter.setz(0);
+
+            MT_DrawArrow(blobcenter,
+                         8.0, 
+                         m_vdFish_Orientation[i],
+                         MT_Blue,
+                         1.0 
+                );
+
+        }
+
+        MT_DrawCircle(m_dFishCOMx, m_iFrameHeight - m_dFishCOMy, MT_Orange, 8.0);
+        blobcenter.setx(m_dFishCOMx);
+        blobcenter.sety(m_iFrameHeight - m_dFishCOMy);
+        blobcenter.setz(0);
+
+        if(m_iNFishFound > 2)
+        {
+
+            double o = -0.5*atan(2.0*m_dFishXY/fabs(m_dFishXX - m_dFishYY));
+            double a = 0.5*(m_dFishXX + m_dFishYY);
+            double b = 0.5*sqrt(fabs(4.0*m_dFishXY*m_dFishXY
+                                     + ((m_dFishXX - m_dFishYY)
+                                        *(m_dFishXX - m_dFishYY))));
+
+            if(!(MT_isnan(o) || MT_isnan(a) || MT_isnan(b)))
+            {
+                MT_DrawEllipse(blobcenter,
+                               2.0*sqrt(fabs(a + b)),
+                               2.0*sqrt(fabs(a - b)),
+                               o,
+                               MT_Orange);
+            }
+        }
+    }
 
 }
 
